@@ -1,0 +1,125 @@
+// 3D Ising model
+
+#include <iostream>
+#include <cstdlib>
+#include <cmath>
+#include <fstream>
+#include <ctime>
+
+using namespace std;
+
+const double PI2=2*M_PI;		// 2Pi
+
+const int L=20;					// Size of the cubic lattice 
+const int MCS=500000;			// Total Monte Carlo Steps
+const int MS=300000;				// Monte Carlo Measure Steps
+const double J=0.9;				// Exchange interaction J=1:AFM; J=-1:FM. Unit: meV
+double T;					    // Monte Carlo temperature. Unit: meV ~ 11.605 K
+double Kb=0.08617;				// Boltzmann constant 0.08617 meV/K
+double H=0;				     	// Magnetic field
+
+void Save(const int sp[][L][L])
+{
+	ofstream out("Ising_Spin.dat",ios::app);
+	for(int i=0;i<L;i++) 
+		for(int j=0;j<L;j++)
+		 for(int k=0;k<L;k++)
+			out<<i<<j<<k<<sp[i][j][k]<<endl;
+	out<<endl;
+	out.close();
+}
+
+double ExchangeEnergy(const int sp[][L][L])
+{
+	double e=0;
+	for(int i=0;i<L;i++) 
+		for(int j=0;j<L;j++)
+			for(int k=0;k<L;k++)
+				e+=J*sp[i][j][k]*(sp[(i+1)%L][j][k]+sp[i][(j+1)%L][k]+sp[i][j][(k+1)%L]);
+	return e;
+}
+
+double Magnetization(const int sp[][L][L])
+{
+	int m=0;
+	for(int i=0;i<L;i++) 
+		for(int j=0;j<L;j++)
+			for(int k=0;k<L;k++)
+				m+=sp[i][j][k];
+
+	return 1.0*m/L/L/L;
+}
+
+void MonteCarlo(int sp[][L][L])    
+{   
+	int iaccept=0;				//accept percent
+	double se=0;				//sum of energy
+	double se2=0;				//square of se
+	double sm=0;				//total magnitization, valid for FM
+	
+	for(int mc=MCS;mc>0;mc--)
+	{
+		for(int a=0;a<L;a++)
+			for(int b=0;b<L;b++)
+			{               
+				const int i=rand()%L;
+				const int j=rand()%L;
+				const int k=rand()%L;
+            
+    			const double de=2*sp[i][j][k]*(J*(sp[(i-1+L)%L][j][k]+sp[(i+1)%L][j][k]+sp[i][(j-1+L)%L][k]+sp[i][(j+1)%L][k]+sp[i][j][(k-1+L)%L]+sp[i][j][(k+1)%L])-H);
+						//delta_E=H_old-H_new
+			
+    			if((de>0)||(RAND_MAX*exp(de/T)>rand()))  // judge whether accept the change of the spin .
+    			{  
+    				sp[i][j][k]*=-1; 	 // spin si update
+    				iaccept++;
+				}
+			}
+		
+		if(mc<=MS)     			 //measure
+    	{
+			const double m=Magnetization(sp);
+			sm+=m;
+    		const double e=ExchangeEnergy(sp)-m*H;			
+			se+=e;
+    		se2+=e*e;
+    	}
+    }
+   
+   se/=MS;
+   se2/=MS;
+   sm/=MS;
+   const double capacity=(se2-se*se)/T/T/L/L/L;
+
+   cout<<"Temperature="<<T/Kb<<"\t"<<capacity<<endl;
+
+   ofstream out("Ising.dat",ios::app);     
+   out<<T/Kb<<'\t'<<H<<'\t'<<se<<'\t'<<capacity<<'\t'<<sm<<'\t'<<100.0*iaccept/MCS/L/L<<"%"<<endl;
+   out.close();
+}
+
+int main()
+{
+	srand((unsigned)time(NULL));
+	
+	int spin[L][L][L];
+	
+	for(int i=0;i<L;i++)
+		for(int j=0;j<L;j++)
+			for(int k=0;k<L;k++)
+				spin[i][j][k]=2*(rand()%2)-1;		//initialize spin randomly    
+	
+    ofstream out("Ising.dat");   
+    out<<"Temperature\tmagnetic field\tenergy\tcapacity\tmagnetization\taccept ratio"<<endl; 
+    out.close();
+	
+	for(T=4.5;T>3;T-=0.05)
+	{
+		//cout<<"Temperature="<<T<<endl;
+		MonteCarlo(spin);
+		Save(spin);
+		if(T/Kb<48 && T/Kb>46); T+=0.03;
+	}
+	
+	return 0;   
+}
